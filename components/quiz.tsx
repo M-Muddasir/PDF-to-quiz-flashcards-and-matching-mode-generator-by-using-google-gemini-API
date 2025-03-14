@@ -13,6 +13,7 @@ import {
 import QuizScore from "./score";
 import QuizReview from "./quiz-overview";
 import { Question } from "@/lib/schemas";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 type QuizProps = {
   questions: Question[];
@@ -135,9 +136,12 @@ export default function Quiz({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <main className="container mx-auto px-4 py-12 max-w-4xl">
-        <h1 className="text-3xl font-bold mb-8 text-center text-foreground">
-          {title}
-        </h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-foreground">
+            {title}
+          </h1>
+          <ThemeSwitcher />
+        </div>
         <div className="relative">
           {!isSubmitted && <Progress value={progress} className="h-1 mb-8" />}
           <div className="min-h-[400px]">

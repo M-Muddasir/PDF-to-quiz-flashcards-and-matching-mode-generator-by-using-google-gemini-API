@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { experimental_useObject } from "ai/react";
-import { questionsSchema } from "@/lib/schemas";
+import { questionsSchema, flashcardsSchema, matchingItemsSchema, LearningMode } from "@/lib/schemas";
 import { z } from "zod";
 import { toast } from "sonner";
 import { FileUp, Plus, Loader2 } from "lucide-react";
@@ -17,24 +17,30 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import Quiz from "@/components/quiz";
+import Flashcards from "@/components/learning-modes/flashcards";
+import Matching from "@/components/learning-modes/matching";
+import ModeSelector from "@/components/mode-selector";
 import { Link } from "@/components/ui/link";
 import NextLink from "next/link";
 import { generateQuizTitle } from "./actions";
 import { AnimatePresence, motion } from "framer-motion";
 import { VercelIcon, GitIcon } from "@/components/icons";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export default function ChatWithFiles() {
   const [files, setFiles] = useState<File[]>([]);
-  const [questions, setQuestions] = useState<z.infer<typeof questionsSchema>>(
-    [],
-  );
+  const [questions, setQuestions] = useState<z.infer<typeof questionsSchema>>([]);
+  const [flashcards, setFlashcards] = useState<z.infer<typeof flashcardsSchema>>([]);
+  const [matchingItems, setMatchingItems] = useState<z.infer<typeof matchingItemsSchema>>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [title, setTitle] = useState<string>();
+  const [selectedMode, setSelectedMode] = useState<LearningMode | null>(null);
+  const [contentGenerated, setContentGenerated] = useState(false);
 
   const {
-    submit,
+    submit: submitQuiz,
     object: partialQuestions,
-    isLoading,
+    isLoading: isLoadingQuiz,
   } = experimental_useObject({
     api: "/api/generate-quiz",
     schema: questionsSchema,
@@ -45,6 +51,43 @@ export default function ChatWithFiles() {
     },
     onFinish: ({ object }) => {
       setQuestions(object ?? []);
+      setContentGenerated(true);
+    },
+  });
+
+  const {
+    submit: submitFlashcards,
+    object: partialFlashcards,
+    isLoading: isLoadingFlashcards,
+  } = experimental_useObject({
+    api: "/api/generate-flashcards",
+    schema: flashcardsSchema,
+    initialValue: undefined,
+    onError: (error) => {
+      toast.error("Failed to generate flashcards. Please try again.");
+      setFiles([]);
+    },
+    onFinish: ({ object }) => {
+      setFlashcards(object ?? []);
+      setContentGenerated(true);
+    },
+  });
+
+  const {
+    submit: submitMatching,
+    object: partialMatching,
+    isLoading: isLoadingMatching,
+  } = experimental_useObject({
+    api: "/api/generate-matching",
+    schema: matchingItemsSchema,
+    initialValue: undefined,
+    onError: (error) => {
+      toast.error("Failed to generate matching items. Please try again.");
+      setFiles([]);
+    },
+    onFinish: ({ object }) => {
+      setMatchingItems(object ?? []);
+      setContentGenerated(true);
     },
   });
 
@@ -89,22 +132,98 @@ export default function ChatWithFiles() {
         data: await encodeFileAsBase64(file),
       })),
     );
-    submit({ files: encodedFiles });
+    
     const generatedTitle = await generateQuizTitle(encodedFiles[0].name);
     setTitle(generatedTitle);
+    
+    // Show mode selector after file is uploaded
+    setSelectedMode("flipcards"); // Default to quiz mode
+    submitQuiz({ files: encodedFiles });
+  };
+  
+  const handleModeSelect = (mode: LearningMode) => {
+    setSelectedMode(mode);
+    
+    // We need to re-encode the files for each mode
+    const getEncodedFiles = async () => {
+      const encodedFiles = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          type: file.type,
+          data: await encodeFileAsBase64(file),
+        }))
+      );
+      
+      if (mode === "quiz" && questions.length === 0) {
+        submitQuiz({ files: encodedFiles });
+      } else if (mode === "flashcards" && flashcards.length === 0) {
+        submitFlashcards({ files: encodedFiles });
+      } else if (mode === "matching" && matchingItems.length === 0) {
+        submitMatching({ files: encodedFiles });
+      }
+    };
+    
+    getEncodedFiles();
+
   };
 
   const clearPDF = () => {
     setFiles([]);
     setQuestions([]);
+    setFlashcards([]);
+    setMatchingItems([]);
+    setSelectedMode(null);
+    setContentGenerated(false);
   };
 
-  const progress = partialQuestions ? (partialQuestions.length / 4) * 100 : 0;
+  const getProgress = () => {
+    if (selectedMode === "quiz") {
+      return partialQuestions ? (partialQuestions.length / 4) * 100 : 0;
+    } else if (selectedMode === "flashcards") {
+      return partialFlashcards ? (partialFlashcards.length / 8) * 100 : 0;
+    } else if (selectedMode === "matching") {
+      return partialMatching ? (partialMatching.length / 6) * 100 : 0;
+    }
+    return 0;
+  };
+  
+  const progress = getProgress();
 
-  if (questions.length === 4) {
-    return (
-      <Quiz title={title ?? "Quiz"} questions={questions} clearPDF={clearPDF} />
-    );
+  if (contentGenerated && selectedMode) {
+    if (selectedMode === "quiz" && questions.length === 4) {
+      return (
+        <Quiz 
+          title={title ?? "Quiz"} 
+          questions={questions} 
+          clearPDF={clearPDF} 
+        />
+      );
+    } else if (selectedMode === "flashcards" && flashcards.length > 0) {
+      return (
+        <Flashcards 
+          title={title ?? "Flashcards"} 
+          flashcards={flashcards} 
+          clearPDF={clearPDF} 
+          onChangeMode={(mode) => handleModeSelect(mode as LearningMode)}
+        />
+      );
+    } else if (selectedMode === "matching" && matchingItems.length > 0) {
+      return (
+        <Matching 
+          title={title ?? "Matching Game"} 
+          matchingItems={matchingItems} 
+          clearPDF={clearPDF} 
+          onChangeMode={(mode) => handleModeSelect(mode as LearningMode)}
+        />
+      );
+    } else if (selectedMode && !isLoadingQuiz && !isLoadingFlashcards && !isLoadingMatching) {
+      return (
+        <ModeSelector 
+          title={title ?? "Choose Learning Mode"} 
+          onSelectMode={handleModeSelect} 
+        />
+      );
+    }
   }
 
   return (
@@ -193,18 +312,18 @@ export default function ChatWithFiles() {
               className="w-full"
               disabled={files.length === 0}
             >
-              {isLoading ? (
+              {isLoadingQuiz || isLoadingFlashcards || isLoadingMatching ? (
                 <span className="flex items-center space-x-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Generating Quiz...</span>
+                  <span>Generating Content...</span>
                 </span>
               ) : (
-                "Generate Quiz"
+                "Generate Learning Content"
               )}
             </Button>
           </form>
         </CardContent>
-        {isLoading && (
+        {(isLoadingQuiz || isLoadingFlashcards || isLoadingMatching) && (
           <CardFooter className="flex flex-col space-y-4">
             <div className="w-full space-y-1">
               <div className="flex justify-between text-sm text-muted-foreground">
@@ -217,12 +336,16 @@ export default function ChatWithFiles() {
               <div className="grid grid-cols-6 sm:grid-cols-4 items-center space-x-2 text-sm">
                 <div
                   className={`h-2 w-2 rounded-full ${
-                    isLoading ? "bg-yellow-500/50 animate-pulse" : "bg-muted"
+                    isLoadingQuiz || isLoadingFlashcards || isLoadingMatching ? "bg-yellow-500/50 animate-pulse" : "bg-muted"
                   }`}
                 />
                 <span className="text-muted-foreground text-center col-span-4 sm:col-span-2">
-                  {partialQuestions
+                  {selectedMode === "quiz" && partialQuestions
                     ? `Generating question ${partialQuestions.length + 1} of 4`
+                    : selectedMode === "flashcards" && partialFlashcards
+                    ? `Generating flashcard ${partialFlashcards.length + 1} of 8`
+                    : selectedMode === "matching" && partialMatching
+                    ? `Generating matching item ${partialMatching.length + 1} of 6`
                     : "Analyzing PDF content"}
                 </span>
               </div>
@@ -235,6 +358,9 @@ export default function ChatWithFiles() {
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
       >
+        <div className="flex items-center gap-2">
+          <ThemeSwitcher />
+        </div>
         <NextLink
           target="_blank"
           href="https://github.com/vercel-labs/ai-sdk-preview-pdf-support"
@@ -242,15 +368,6 @@ export default function ChatWithFiles() {
         >
           <GitIcon />
           View Source Code
-        </NextLink>
-
-        <NextLink
-          target="_blank"
-          href="https://vercel.com/templates/next.js/ai-quiz-generator"
-          className="flex flex-row gap-2 items-center bg-zinc-900 px-2 py-1.5 rounded-md text-zinc-50 hover:bg-zinc-950 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-50"
-        >
-          <VercelIcon size={14} />
-          Deploy with Vercel
         </NextLink>
       </motion.div>
     </div>
