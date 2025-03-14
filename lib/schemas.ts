@@ -38,5 +38,5 @@ export type MatchingItem = z.infer<typeof matchingItemSchema>;
 
 export const matchingItemsSchema = z.array(matchingItemSchema).length(6);
 
-export type LearningMode = "quiz" | "flashcards" | "matching";
+export type LearningMode = "quiz" | "flashcards" | "matching" | "all";
 

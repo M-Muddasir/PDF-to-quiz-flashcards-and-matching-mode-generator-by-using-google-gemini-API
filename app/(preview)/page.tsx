@@ -137,7 +137,7 @@ export default function ChatWithFiles() {
     setTitle(generatedTitle);
     
     // Show mode selector after file is uploaded
-    setSelectedMode("flipcards"); // Default to quiz mode
+    setSelectedMode("all"); // Default to all mode
     submitQuiz({ files: encodedFiles });
   };
   

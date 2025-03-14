@@ -254,7 +254,7 @@ export default function Flashcards({
           </div>
 
           <Button
-            variant={currentCardIndex === flashcards.length - 1 ? "primary" : "outline"}
+            variant={currentCardIndex === flashcards.length - 1 ? "default" : "outline"}
             onClick={handleNextCard}
             disabled={currentCardIndex === flashcards.length - 1}
             className="flex items-center gap-1"
